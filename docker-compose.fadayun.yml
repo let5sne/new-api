@@ -17,7 +17,7 @@ x-new-api-common: &new-api-common
   environment:
     - TZ=Asia/Shanghai
     - REDIS_CONN_STRING=redis://aicoding-redis-1:6379
-    - SQL_DSN=postgresql://postgres:${PG_PASSWORD}@postgres13:5432/new-api
+    - SQL_DSN=postgresql://claude:${PG_PASSWORD}@postgres13:5432/new-api
     - SESSION_SECRET=${SESSION_SECRET}
     - MEMORY_CACHE_ENABLED=true
     - BATCH_UPDATE_ENABLED=true
