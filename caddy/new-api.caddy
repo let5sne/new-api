@@ -1,0 +1,31 @@
+# api.ai.let5see.xyz — new-api 蓝绿部署 Caddy 配置
+# 由 fadayun-remote.sh 动态管理 upstream 切换
+# 部署路径: /etc/caddy/conf.d/new-api.caddy
+
+api.ai.let5see.xyz {
+    reverse_proxy {
+        # UPSTREAM_LINE (由脚本替换，勿手动修改此行)
+        to http://127.0.0.1:3100 http://127.0.0.1:3101
+        lb_policy round_robin
+        health_uri /api/status
+        health_interval 15s
+        health_timeout 10s
+        flush_interval -1
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        transport http {
+            read_timeout 300s
+            write_timeout 300s
+            dial_timeout 30s
+        }
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+}

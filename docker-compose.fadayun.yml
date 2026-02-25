@@ -1,0 +1,71 @@
+# fadayun 专用双实例部署配置
+# 复用已有: aicoding-redis-1 (Redis), postgres13 (PostgreSQL 15)
+# 网络: shared-db-network (external)
+#
+# 使用方法（在 fadayun /data/new-api-src/ 目录下执行）:
+#   docker compose -f docker-compose.fadayun.yml --env-file .env up -d
+#
+# 敏感配置从 .env 文件读取（不提交到 git）
+
+version: '3.8'
+
+x-new-api-common: &new-api-common
+  restart: always
+  command: --log-dir /app/logs
+  env_file:
+    - .env
+  environment:
+    - TZ=Asia/Shanghai
+    - REDIS_CONN_STRING=redis://aicoding-redis-1:6379
+    - SQL_DSN=postgresql://postgres:${PG_PASSWORD}@postgres13:5432/new-api
+    - SESSION_SECRET=${SESSION_SECRET}
+    - MEMORY_CACHE_ENABLED=true
+    - BATCH_UPDATE_ENABLED=true
+    - BATCH_UPDATE_INTERVAL=5
+    - SYNC_FREQUENCY=60
+    - STREAMING_TIMEOUT=180
+    - ERROR_LOG_ENABLED=true
+  networks:
+    - shared-db-network
+  healthcheck:
+    test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/status | grep -o '\"success\":true' || exit 1"]
+    interval: 15s
+    timeout: 10s
+    retries: 4
+    start_period: 30s
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "100m"
+      max-file: "3"
+
+services:
+  # 稳定版实例（蓝）
+  new-api-a:
+    <<: *new-api-common
+    image: new-api:${TAG_A:-canary}
+    container_name: new-api-a
+    ports:
+      - "127.0.0.1:3100:3000"
+    volumes:
+      - /data/new-api/data-a:/data
+      - /data/new-api/logs-a:/app/logs
+    environment:
+      - NODE_TYPE=master
+
+  # 灰度版实例（绿）
+  new-api-b:
+    <<: *new-api-common
+    image: new-api:${TAG_B:-canary}
+    container_name: new-api-b
+    ports:
+      - "127.0.0.1:3101:3000"
+    volumes:
+      - /data/new-api/data-b:/data
+      - /data/new-api/logs-b:/app/logs
+    environment:
+      - NODE_TYPE=slave
+
+networks:
+  shared-db-network:
+    external: true
