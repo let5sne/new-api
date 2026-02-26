@@ -470,6 +470,14 @@ func PasskeyVerifyFinish(c *gin.Context) {
 		return
 	}
 
+	// 写入一次性标记，供 /api/verify (method=passkey) 消费。
+	session := sessions.Default(c)
+	session.Set(PasskeyVerifiedOnceKey, true)
+	if err := session.Save(); err != nil {
+		common.ApiError(c, fmt.Errorf("保存 Passkey 验证状态失败: %v", err))
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Passkey 验证成功",
