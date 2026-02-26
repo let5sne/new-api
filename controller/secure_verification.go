@@ -17,6 +17,8 @@ import (
 const (
 	// SecureVerificationSessionKey 安全验证的 session key
 	SecureVerificationSessionKey = "secure_verified_at"
+	// PasskeyVerifiedOnceKey Passkey 一次性验证标记（由 PasskeyVerifyFinish 设置，UniversalVerify 消费）
+	PasskeyVerifiedOnceKey = "passkey_verified_once"
 	// SecureVerificationTimeout 验证有效期（秒）
 	SecureVerificationTimeout = 300 // 5分钟
 )
@@ -74,6 +76,7 @@ func UniversalVerify(c *gin.Context) {
 	}
 
 	// 根据验证方式进行验证
+	session := sessions.Default(c)
 	var verified bool
 	var verifyMethod string
 
@@ -95,11 +98,16 @@ func UniversalVerify(c *gin.Context) {
 			common.ApiError(c, fmt.Errorf("用户未启用Passkey"))
 			return
 		}
-		// Passkey 验证需要先调用 PasskeyVerifyBegin 和 PasskeyVerifyFinish
-		// 这里只是验证 Passkey 验证流程是否已经完成
-		// 实际上，前端应该先调用这两个接口，然后再调用本接口
-		verified = true // Passkey 验证逻辑已在 PasskeyVerifyFinish 中完成
+		// Passkey 验证需要先调用 PasskeyVerifyBegin 和 PasskeyVerifyFinish，
+		// 并在 session 中留下一次性标记，由本接口消费后才能完成安全验证。
+		verifiedOnce, ok := session.Get(PasskeyVerifiedOnceKey).(bool)
+		if !ok || !verifiedOnce {
+			common.ApiError(c, fmt.Errorf("Passkey 验证未完成，请先完成 Passkey 验证流程"))
+			return
+		}
+		session.Delete(PasskeyVerifiedOnceKey) // 一次性消费，防止重放
 		verifyMethod = "Passkey"
+		verified = true
 
 	default:
 		common.ApiError(c, fmt.Errorf("不支持的验证方式: %s", req.Method))
@@ -112,7 +120,6 @@ func UniversalVerify(c *gin.Context) {
 	}
 
 	// 验证成功，在 session 中记录时间戳
-	session := sessions.Default(c)
 	now := time.Now().Unix()
 	session.Set(SecureVerificationSessionKey, now)
 	if err := session.Save(); err != nil {
