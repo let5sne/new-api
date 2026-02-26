@@ -19,6 +19,8 @@ const (
 	SecureVerificationSessionKey = "secure_verified_at"
 	// SecureVerificationTimeout 验证有效期（秒）
 	SecureVerificationTimeout = 300 // 5分钟
+	// PasskeyVerifiedOnceKey 一次性标志：PasskeyVerifyForSecure 完成后设置，UniversalVerify 消费后清除
+	PasskeyVerifiedOnceKey = "passkey_verified_once"
 )
 
 type UniversalVerifyRequest struct {
@@ -95,10 +97,22 @@ func UniversalVerify(c *gin.Context) {
 			common.ApiError(c, fmt.Errorf("用户未启用Passkey"))
 			return
 		}
-		// Passkey 验证需要先调用 PasskeyVerifyBegin 和 PasskeyVerifyFinish
-		// 这里只是验证 Passkey 验证流程是否已经完成
-		// 实际上，前端应该先调用这两个接口，然后再调用本接口
-		verified = true // Passkey 验证逻辑已在 PasskeyVerifyFinish 中完成
+		// 🔒 安全修复：检查 PasskeyVerifyForSecure 是否已完成（一次性标志）
+		// 前端必须先调用 /api/user/passkey/verify/begin + /api/user/passkey/verify/finish，
+		// 后者会在 session 中写入 PasskeyVerifiedOnceKey，本接口消费后清除。
+		session := sessions.Default(c)
+		passkeyOnce := session.Get(PasskeyVerifiedOnceKey)
+		if passkeyOnce == nil {
+			common.ApiError(c, fmt.Errorf("Passkey 验证未完成，请先完成 Passkey 验证流程"))
+			return
+		}
+		// 消费一次性标志，防止重放
+		session.Delete(PasskeyVerifiedOnceKey)
+		if err := session.Save(); err != nil {
+			common.ApiError(c, fmt.Errorf("保存验证状态失败: %v", err))
+			return
+		}
+		verified = true
 		verifyMethod = "Passkey"
 
 	default:
@@ -139,6 +153,8 @@ func PasskeyVerifyAndSetSession(c *gin.Context) {
 	session := sessions.Default(c)
 	now := time.Now().Unix()
 	session.Set(SecureVerificationSessionKey, now)
+	// 🔒 写入一次性标志，供 UniversalVerify passkey 分支消费
+	session.Set(PasskeyVerifiedOnceKey, now)
 	_ = session.Save()
 }
 
