@@ -291,7 +291,7 @@ docker run --name new-api -d --restart always \
 ## 🚢 Deployment
 
 > [!TIP]
-> **Latest Docker image:** `calciumion/new-api:latest`
+> **Latest Docker image:** `let5see/new-api:latest`
 
 ### 📋 Deployment Requirements
 
